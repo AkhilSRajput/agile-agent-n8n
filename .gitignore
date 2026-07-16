@@ -1,0 +1,15 @@
+# Credentials — never commit these
+.env
+config/*-credentials.json
+!config/*.example.json
+
+# n8n local data
+.n8n/
+n8n_data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (if adding any tooling)
+node_modules/
