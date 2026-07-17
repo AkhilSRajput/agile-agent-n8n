@@ -1,0 +1,45 @@
+{
+  "_comment": "Maps LLM-returned stakeholder_type values to Slack user IDs or channel handles. Update these without touching workflow JSON.",
+  "routing": {
+    "DevOps": {
+      "slack_target": "@devops-oncall",
+      "channel": "#devops",
+      "escalation_channel": "#incidents"
+    },
+    "Security": {
+      "slack_target": "@security-team",
+      "channel": "#security",
+      "escalation_channel": "#security-urgent"
+    },
+    "PM": {
+      "slack_target": "@product-team",
+      "channel": "#product",
+      "escalation_channel": "#product"
+    },
+    "Platform": {
+      "slack_target": "@platform-engineering",
+      "channel": "#platform",
+      "escalation_channel": "#platform"
+    },
+    "QA": {
+      "slack_target": "@qa-team",
+      "channel": "#qa",
+      "escalation_channel": "#qa"
+    },
+    "Design": {
+      "slack_target": "@design-team",
+      "channel": "#design",
+      "escalation_channel": "#design"
+    },
+    "External": {
+      "slack_target": "@tpm-oncall",
+      "channel": "#external-dependencies",
+      "escalation_channel": "#leadership"
+    }
+  },
+  "urgency_escalation": {
+    "critical": "escalation_channel",
+    "high": "channel",
+    "normal": "slack_target"
+  }
+}
