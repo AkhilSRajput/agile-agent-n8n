@@ -1,0 +1,280 @@
+{
+  "name": "High-Signal Daily Digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "node-cron-trigger",
+      "name": "CRON: 8AM Weekdays",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "since_timestamp",
+              "value": "={{ new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString() }}"
+            },
+            {
+              "name": "jira_jql",
+              "value": "=project = YOUR_PROJECT_KEY AND updated >= -24h AND sprint in openSprints() ORDER BY updated DESC"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-set-time-window",
+      "name": "Set: Time Window",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://YOUR_JIRA_DOMAIN.atlassian.net/rest/api/3/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "jql",
+              "value": "={{ $json.jira_jql }}"
+            },
+            {
+              "name": "fields",
+              "value": "summary,status,comment,description,customfield_10014,priority,assignee"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-jira-fetch",
+      "name": "Jira: Fetch Updated Tickets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "JIRA_CREDENTIAL_ID",
+          "name": "Jira API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.total }}",
+              "operation": "largerEqual",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "node-check-has-tickets",
+      "name": "Any Tickets Updated?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const issues = $input.first().json.issues || [];\n\nconst grouped = {};\nfor (const issue of issues) {\n  const epic = issue.fields.customfield_10014 || 'No Epic';\n  if (!grouped[epic]) grouped[epic] = [];\n\n  const sanitisedSummary = issue.fields.summary\n    .replace(/`[^`]+`/g, '[code removed]')\n    .replace(/\\b[A-Z][a-z]+ [A-Z][a-z]+\\b/g, '[Engineer]');\n\n  const latestComment = (issue.fields.comment?.comments || [])\n    .slice(-3)\n    .map(c => c.body\n      .replace(/```[\\s\\S]*?```/g, '[code block removed]')\n      .replace(/`[^`]+`/g, '[code removed]')\n      .replace(/\\b[A-Z][a-z]+ [A-Z][a-z]+\\b/g, '[Engineer]')\n    )\n    .join(' | ');\n\n  grouped[epic].push({\n    key: issue.key,\n    summary: sanitisedSummary,\n    status: issue.fields.status?.name || 'Unknown',\n    latest_comment: latestComment\n  });\n}\n\nreturn Object.entries(grouped).map(([epic_name, tickets]) => ({\n  json: {\n    epic_name,\n    ticket_count: tickets.length,\n    tickets_sanitised: tickets\n      .map(t => `[${t.key}] ${t.summary} (${t.status})${t.latest_comment ? ': ' + t.latest_comment : ''}`)\n      .join('\\n')\n  }\n}));"
+      },
+      "id": "node-group-by-epic",
+      "name": "Code: Group Tickets by Epic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-3-5-sonnet-20241022\",\n  \"max_tokens\": 512,\n  \"system\": \"You are an Agile engineering assistant. Your job is to produce a concise daily digest of sprint progress for an engineering team's Slack channel.\\n\\nRules:\\n- Never include individual engineer names. Replace any name with [Engineer].\\n- Never reproduce source code.\\n- Write in plain English. Avoid Jira-speak.\\n- Output only valid JSON — no preamble, no explanation outside the JSON.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Here is a list of Jira tickets updated in the last 24 hours.\\n\\n**Epic: {{ $json.epic_name }}**\\nTickets ({{ $json.ticket_count }} total):\\n{{ $json.tickets_sanitised }}\\n\\nProduce a 3-bullet summary of what happened in this Epic today. Each bullet should be one sentence, focus on progress/blockers/decisions (not who did the work), and use plain English.\\n\\nRespond with this exact JSON:\\n{\\n  \\\"epic_name\\\": \\\"{{ $json.epic_name }}\\\",\\n  \\\"bullets\\\": [\\\"Bullet 1\\\", \\\"Bullet 2\\\", \\\"Bullet 3\\\"],\\n  \\\"has_blockers\\\": true or false,\\n  \\\"blocker_summary\\\": \\\"One-sentence blocker description, or empty string\\\"\\n}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "node-llm-digest",
+      "name": "LLM: Summarise Epic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1340, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ANTHROPIC_CREDENTIAL_ID",
+          "name": "Anthropic"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst epicSummaries = items.map(item => {\n  let parsed;\n  try {\n    parsed = JSON.parse(item.json.content[0].text);\n  } catch (e) {\n    return null;\n  }\n  const bullets = (parsed.bullets || []).map(b => `• ${b}`).join('\\n');\n  const blockerLine = parsed.has_blockers ? `\\n:red_circle: *Blocker:* ${parsed.blocker_summary}` : '';\n  return `*${parsed.epic_name}*\\n${bullets}${blockerLine}`;\n}).filter(Boolean).join('\\n\\n');\n\nconst now = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });\n\nreturn [{\n  json: {\n    slack_message: `:clipboard: *Daily Engineering Digest — ${now}*\\n\\n${epicSummaries}\\n\\n_Powered by Agile Agent • Standup time saved :rocket:_`\n  }\n}];"
+      },
+      "id": "node-build-slack-message",
+      "name": "Code: Build Slack Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "channel": "={{ $env.SLACK_CHANNEL_ID }}",
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {
+          "mrkdwn": true
+        }
+      },
+      "id": "node-slack-digest",
+      "name": "Slack: Post Digest",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2,
+      "position": [1780, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "SLACK_CREDENTIAL_ID",
+          "name": "Slack OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "node-no-tickets",
+      "name": "No Tickets Updated",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "CRON: 8AM Weekdays": {
+      "main": [
+        [
+          {
+            "node": "Set: Time Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set: Time Window": {
+      "main": [
+        [
+          {
+            "node": "Jira: Fetch Updated Tickets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jira: Fetch Updated Tickets": {
+      "main": [
+        [
+          {
+            "node": "Any Tickets Updated?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Tickets Updated?": {
+      "main": [
+        [
+          {
+            "node": "Code: Group Tickets by Epic",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Tickets Updated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Group Tickets by Epic": {
+      "main": [
+        [
+          {
+            "node": "LLM: Summarise Epic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM: Summarise Epic": {
+      "main": [
+        [
+          {
+            "node": "Code: Build Slack Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Build Slack Message": {
+      "main": [
+        [
+          {
+            "node": "Slack: Post Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": ""
+  },
+  "tags": ["agile-agent", "phase-1", "daily-digest"],
+  "meta": {
+    "instanceId": "agile-agent-phase1"
+  }
+}
