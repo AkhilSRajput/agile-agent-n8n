@@ -1,0 +1,40 @@
+{
+  "_comment": "Sample Jira webhook payload for the ticket_updated event. Used by validate-workflows.sh to test scope-creep-sentinel.json without a live Jira instance.",
+  "webhookEvent": "jira:issue_updated",
+  "timestamp": 1736000000000,
+  "issue": {
+    "id": "10042",
+    "key": "ENG-142",
+    "fields": {
+      "summary": "Implement OAuth2 login flow",
+      "status": { "name": "In Progress" },
+      "description": "## Acceptance Criteria\n- User can log in with Google SSO\n- Session expires after 24h\n- Login page matches design spec v2",
+      "comment": {
+        "comments": [
+          {
+            "id": "c001",
+            "body": "I've finished the Google OAuth redirect. Tested locally, works fine.",
+            "created": "2026-07-07T09:00:00.000Z"
+          },
+          {
+            "id": "c002",
+            "body": "Actually, can we also add Apple Sign-In here? The PM mentioned it in the last call. Also thinking we should add MFA support while we're in the auth code.",
+            "created": "2026-07-07T14:30:00.000Z"
+          },
+          {
+            "id": "c003",
+            "body": "And we'll need to update the password reset flow to match the new auth architecture.",
+            "created": "2026-07-07T15:00:00.000Z"
+          }
+        ],
+        "total": 3
+      },
+      "sprint": {
+        "name": "Sprint 12",
+        "startDate": "2026-07-07T00:00:00.000Z",
+        "endDate": "2026-07-17T00:00:00.000Z"
+      }
+    }
+  },
+  "user": { "displayName": "Akhil S", "accountId": "5d2e4f" }
+}

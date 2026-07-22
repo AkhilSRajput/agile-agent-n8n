@@ -1,0 +1,36 @@
+{
+  "_comment": "Sample Jira webhook payload for a ticket status change to Blocked. Used to test blocker-router.json.",
+  "webhookEvent": "jira:issue_updated",
+  "timestamp": 1736001000000,
+  "issue": {
+    "id": "10087",
+    "key": "ENG-157",
+    "fields": {
+      "summary": "Deploy search service to staging",
+      "status": { "name": "Blocked" },
+      "labels": ["Impediment"],
+      "description": "Deploy the new Elasticsearch-based search service to staging for QA sign-off.\n\n## Acceptance Criteria\n- Search service deployed to staging-us-east-1\n- Health check endpoint returns 200\n- QA can run smoke tests",
+      "comment": {
+        "comments": [
+          {
+            "id": "c010",
+            "body": "Deployment is failing. The CI/CD pipeline can't find the ECR image. Error: `manifest for ecr.aws/.../search-service:latest not found`. Looks like the image wasn't pushed in the last build.",
+            "created": "2026-07-07T11:00:00.000Z"
+          },
+          {
+            "id": "c011",
+            "body": "Checked the build logs — the Docker push step timed out. Might be an IAM permissions issue on the build role.",
+            "created": "2026-07-07T11:45:00.000Z"
+          }
+        ],
+        "total": 2
+      },
+      "sprint": {
+        "name": "Sprint 12",
+        "startDate": "2026-07-06T00:00:00.000Z",
+        "endDate": "2026-07-17T00:00:00.000Z"
+      }
+    }
+  },
+  "user": { "displayName": "Akhil Singh", "accountId": "7f3a1b" }
+}
